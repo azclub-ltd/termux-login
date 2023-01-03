@@ -1,15 +1,15 @@
-#!/bin/sh
+#!/bin/bash
 # Termux Login System
 validatePass() {
   echo "Enter your Password:"
-  read tpass
+  read -r tpass
   if [[ $tpass == "pass" ]]; then
     clear
     echo "Welcome Sir, Now the stage is your"
   else
     echo "Password doesn't match"
     echo "Do you want to exit?(Y/n)"
-    read cnfm
+    read -r cnfm
     if [[ $cnfm == "n" || $cnfm == "no" ]]; then
       echo "Try Re-logging"
       validateUser
@@ -21,14 +21,14 @@ validatePass() {
 }
 validateUser() {
   echo "Enter Username: "
-  read tuser
+  read -r tuser
   if [[ $tuser == "root" ]]; then
     echo "Welcome root"
     validatePass
   else
     echo "No user found"
     echo "Do you want to exit?(Y/n)"
-    read cnfm
+    read -r cnfm
     if [[ $cnfm == "n" || $cnfm == "no" ]]; then
       echo "Try Re-logging"
       validateUser

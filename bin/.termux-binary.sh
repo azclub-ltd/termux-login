@@ -54,6 +54,7 @@ function handleExistingCredentialFile() {
             echo "$removeMsg"
         else
             echo "Terminating..."
+            kill -9 $PPID
         fi
     else
         echo "Good to go."
@@ -115,6 +116,7 @@ function checkUserName() {
         # Test if the user from current line matches the actual user
         if [ "$userInDB" == "$userName" ]; then
             querifiedUserFound=true
+            break
         fi
     done <"$shadowFile"
     if $querifiedUserFound; then
@@ -161,9 +163,41 @@ function enterUserName() {
         enterUserName
     fi
 }
+function comparePassword() {
+    local user_name user_pass user_pass_encrypted userPointer userArray
+    user_name=$1
+    user_pass=$2
+    while read -r eachLine; do
+        # Get the line by user name
+        read -r userPointer <<<"$(cut -d: -f1 <<<"$eachLine")"
+        if [ "$userPointer" == "$user_name" ]; then
+            read -ra userArray <<<"$(cut -d: -f- <<<"$eachLine")"
+            break
+        fi
+    done <"$shadowFile"
+    local passArray hash_type salt
+    # Now extract password
+    read -r passArray <<<"$(cut -d$ -f- <<<"${userArray[1]}")"
+    hash_type=${passArray[0]}
+    salt=${passArray[1]}
+    user_pass_encrypted=$(openssl passwd -"$hash_type" -salt "$salt" "$upass")
+    # Compare password
+    if [ "$user_pass_encrypted" == "${userArray[1]}" ]; then
+        echo "Now the stage is yours"
+        exit 0
+    fi
+}
 function addUser() {
     ensureRequiredPackage
     enterUserName
+}
+# create a function named inject
+function inject() {
+    if diff -q bin/non-modified "$PREFIX"/etc/termux-login.sh >/dev/null; then
+        echo "terlog login" >"$PREFIX"/etc/termux-login.sh
+    else
+        echo "Already some login script found do you want to Override it?(y/n)"
+    fi
 }
 function startSetup() {
     checkExistingCredentialFile
@@ -172,10 +206,43 @@ function startSetup() {
 }
 function loginUser() {
     ensureRequiredPackage
+    # promt user for username
+    local user_name
+    echo "Enter your user name:"
+    read -r user_name
+    if checkUserName "$user_name"; then
+        echo "Welcome ${user_name}"
+        echo "Enter your password:"
+        local user_pass
+        read -r -s user_pass
+        comparePassword "$user_name" "$user_pass"
+    else
+        echo "No user Found"
+        loginUser
+    fi
+
     echo "function is under construction"
 }
-function removeUser() {
-    echo "function is under construction"
+function helpUser() {
+    local helpText
+    helpText="terlog [option]
+possible options are:-
+setup           : setup for first time
+add-user        : add a new user
+login-user      : log a user in
+-h              : show help
+--help          : same as -h
+
+Description:-
+'setup' option is for first time setup only. It eventually delete previous login details if exist.
+'add-user' option is to add a new user to the database. It doesn't delete previous login details.
+'login-user' option is to log a user in. This option is used by system at starting.
+
+More options will be available soon.
+"
+    printf "\n"
+    echo "$helpText"
+    printf "\n\n"
 }
 # Main code starts here
 if [ "$1" == "setup" ]; then
@@ -184,17 +251,6 @@ elif [ "$1" == "add-user" ]; then
     addUser
 elif [ "$1" == "login-user" ]; then
     loginUser
-elif [ "$1" == "remove-user" ]; then
-    removeUser
+elif [ "$1" == "--help" ] || [ "$1" == "-h" ] || [ "$1" == "" ]; then
+    helpUser
 fi
-
-# # Boot script Management
-# function checkBootScript()
-# {
-#     if diff -q bin/non-modified "$PREFIX"/etc/termux-login.sh > /dev/null
-#     then
-#         echo "terlog login" > "$PREFIX"/etc/termux-login.sh
-#     else
-#         echo "Already some login script found do you want to Override it?(y/n)"
-#     fi
-# }

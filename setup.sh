@@ -33,7 +33,7 @@ function createBinFile() {
         echo "Binary created"
         if chmod +x terlog; then
             echo "Execute permission given"
-            if mv terlog "PATH"; then
+            if mv terlog "$PATH"; then
                 echo "now 'terlog' command is available globally"
             fi
         fi

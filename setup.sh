@@ -57,11 +57,11 @@ function manageBinPermission() {
 }
 function installRequiredPackage() {
     local packPath
-    packPath=$(which openssl)
+    packPath=$(which openssl passwd)
     if [ "$packPath" == "" ]; then
         # package install
         echo "Installing required package.."
-        pkg install -y openssl >/dev/null
+        pkg install -y openssl-tool >/dev/null
     fi
 }
 function setup() {

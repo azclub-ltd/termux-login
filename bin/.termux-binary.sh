@@ -63,11 +63,11 @@ function handleExistingCredentialFile() {
 }
 function ensureRequiredPackage() {
     local packPath
-    packPath=$(which openssl)
+    packPath=$(which openssl passwd)
     if [ "$packPath" == "" ]; then
         # package install
         echo "Installing missing package"
-        pkg install -y openssl >/dev/null
+        pkg install -y openssl-tool >/dev/null
     fi
 }
 # store credential function here

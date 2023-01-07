@@ -57,17 +57,19 @@ function handleExistingCredentialFile() {
             kill -9 $PPID
         fi
     else
+        touch "$shadowFile"
         echo "Good to go."
-        touch "$PREFIX"/etc/shadow
     fi
 }
 function ensureRequiredPackage() {
     local packPath
-    packPath=$(which openssl passwd)
+    packPath=$(which openssl-tool) &&
     if [ "$packPath" == "" ]; then
         # package install
         echo "Installing missing package"
         pkg install -y openssl-tool >/dev/null
+    else
+        echo "Necessary packages already installed"
     fi
 }
 # store credential function here
@@ -171,13 +173,13 @@ function comparePassword() {
         # Get the line by user name
         read -r userPointer <<<"$(cut -d: -f1 <<<"$eachLine")"
         if [ "$userPointer" == "$user_name" ]; then
-            read -ra userArray <<<"$(cut -d: -f- <<<"$eachLine")"
+            read -ra userArray <<<"$(cut -d: -f1- <<<"$eachLine")"
             break
         fi
     done <"$shadowFile"
     local passArray hash_type salt
     # Now extract password
-    read -r passArray <<<"$(cut -d$ -f- <<<"${userArray[1]}")"
+    read -r passArray <<<"$(cut -d$ -f1- <<<"${userArray[1]}")"
     hash_type=${passArray[0]}
     salt=${passArray[1]}
     user_pass_encrypted=$(openssl passwd -"$hash_type" -salt "$salt" "$upass")
@@ -251,6 +253,8 @@ elif [ "$1" == "add-user" ]; then
     addUser
 elif [ "$1" == "login-user" ]; then
     loginUser
-elif [ "$1" == "--help" ] || [ "$1" == "-h" ] || [ "$1" == "" ]; then
+elif [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+    helpUser
+else
     helpUser
 fi

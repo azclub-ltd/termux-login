@@ -29,7 +29,7 @@ function binChecker() {
 }
 function createBinFile() {
     # Create bin File
-    if cat /bin/.termux-binary.sh >"terlog"; then
+    if cat bin/.termux-binary.sh >"terlog"; then
         echo "Binary created"
         if chmod +x terlog; then
             echo "Execute permission given"

@@ -74,3 +74,4 @@ function setup() {
     echo 'terlog has been installed successfully in your system. Use "terlog --help" for details info'
     echo 'use "terlog setup" to setup login system'
 }
+setup

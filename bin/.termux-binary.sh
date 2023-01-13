@@ -1,15 +1,17 @@
 #!/bin/bash
 # Global variable
 shadowFile=$PREFIX/etc/shadow
+passwdFile=$PREFIX/etc/passwd
+loginFile=$PREFIX/etc/termux-login.sh
 
-# check existing Credential
+# All necessary function written here
 function checkExistingCredentialFile() {
-    if [ -e "$PREFIX/etc/passwd" ] || [ -e "$shadowFile" ]; then
+    if [ -e "$passwdFile" ] || [ -e "$shadowFile" ]; then
         credFileFound=true
         # check whether credential is in both file
-        if [ -e "$PREFIX/etc/passwd" ] && [ -e "$shadowFile" ]; then
+        if [ -e "$passwdFile" ] && [ -e "$shadowFile" ]; then
             credFileFoundCode=0
-        elif [ -e "$PREFIX/etc/passwd" ]; then
+        elif [ -e "$passwdFile" ]; then
             credFileFoundCode=1
         elif [ -e "$shadowFile" ]; then
             credFileFoundCode=2
@@ -33,13 +35,13 @@ function handleExistingCredentialFile() {
         read -r confirm1
         if [ "$confirm1" == "y" ] || [ "$confirm1" == "yes" ]; then
             if [ "$credFileFoundCode" -eq 0 ]; then
-                if rm "$PREFIX/etc/passwd" "$shadowFile"; then
+                if rm "$passwdFile" "$shadowFile"; then
                     removeMsg="Successfully removed"
                 else
                     removeMsg="Failed to remove"
                 fi
             elif [ "$credFileFoundCode" -eq 1 ]; then
-                if rm "$PREFIX/etc/passwd"; then
+                if rm "$passwdFile"; then
                     removeMsg="Successfully removed"
                 else
                     removeMsg="Failed to remove"
@@ -61,18 +63,57 @@ function handleExistingCredentialFile() {
         echo "Good to go."
     fi
 }
-function ensureRequiredPackage() {
-    local packPath
-    packPath=$(which openssl-tool) &&
-    if [ "$packPath" == "" ]; then
-        # package install
-        echo "Installing missing package"
-        pkg install -y openssl-tool >/dev/null
+function unInstallTerlog() {
+    echo "Removing credentials.."
+    checkExistingCredentialFile
+    if $credFileFound; then
+        if [ "$credFileFoundCode" -eq 0 ]; then
+            rm "$passwdFile" "$shadowFile"
+        elif [ "$credFileFoundCode" -eq 1 ]; then
+            rm "$passwdFile"
+        elif [ "$credFileFoundCode" -eq 2 ]; then
+            rm "$shadowFile"
+        fi
+    fi
+
+    echo "Removing login script.."
+    local tempFile
+    tempFile=$PREFIX/tmp/termux-login.tmp
+    sed '/^#/!{/terlog login-user/d;}' "$loginFile" >"$tempFile" && mv "$tempFile" "$loginFile"
+
+    echo "Uninstalling Terlog.."
+    if [ -e "$PATH"/terlog ]; then
+        rm "$PATH"/terlog
+    fi
+    echo "Successfully Uninstalled."
+}
+function promtUninstall() {
+    local confirmDel
+    confirmDel=$1
+    if [ "$confirmDel" == "-y" ]; then
+        # start uninstallation
+        unInstallTerlog
     else
-        echo "Necessary packages already installed"
+        echo "It will uninstall terlog packages and credentials from termux"
+        echo "Are you sure to uninstall?(y/n)"
+        read -r confirmDel
+        if [ "$confirmDel" == "y" ] || [ "$confirmDel" == "yes" ]; then
+            unInstallTerlog
+        fi
     fi
 }
-# store credential function here
+function ensureRequiredPackage() {
+    # ensuring required pacakges
+    if ! command -v openssl passwd >/dev/null 2>&1; then
+        echo "Installing required package.."
+        if pkg install openssl-tool -y >/dev/null 2>&1; then
+            echo "Successfully installed"
+        else
+            echo "There was an error installing package, Exiting"
+            kill -9 $PPID
+        fi
+    fi
+}
 function storeCredential() {
     local generatedCredential
     generatedCredential=$1
@@ -173,33 +214,82 @@ function comparePassword() {
         # Get the line by user name
         read -r userPointer <<<"$(cut -d: -f1 <<<"$eachLine")"
         if [ "$userPointer" == "$user_name" ]; then
-            read -ra userArray <<<"$(cut -d: -f1- <<<"$eachLine")"
+            read -ra userArray <<<"$(cut -d: -f1- --output-delimiter=' ' <<<"$eachLine")"
             break
         fi
     done <"$shadowFile"
     local passArray hash_type salt
     # Now extract password
-    read -r passArray <<<"$(cut -d$ -f1- <<<"${userArray[1]}")"
+    read -ra passArray <<<"$(cut -d$ -f1- --output-delimiter=' ' <<<"${userArray[1]}")"
     hash_type=${passArray[0]}
+    hash_type=$((hash_type + 0)) # type casted to number
     salt=${passArray[1]}
-    user_pass_encrypted=$(openssl passwd -"$hash_type" -salt "$salt" "$upass")
+    user_pass_encrypted=$(openssl passwd -$hash_type -salt "$salt" "$user_pass")
+    echo "$user_pass_encrypted"
     # Compare password
     if [ "$user_pass_encrypted" == "${userArray[1]}" ]; then
         echo "Now the stage is yours"
-        exit 0
+        return 0
+    else
+        return 1
     fi
 }
 function addUser() {
     ensureRequiredPackage
     enterUserName
 }
-# create a function named inject
-function inject() {
-    if diff -q bin/non-modified "$PREFIX"/etc/termux-login.sh >/dev/null; then
-        echo "terlog login" >"$PREFIX"/etc/termux-login.sh
+function overrideConfirmFunc() {
+
+    local confirmOverride logScript
+    logScript="terlog login"
+    read -r confirmOverride
+    if [ "$confirmOverride" == "yes" ] || [ "$confirmOverride" == "y" ]; then
+        # proceed with overriding
+        echo "$logScript" >"$loginFile"
+        return 0
+    elif [ "$confirmOverride" == "safe" ] || [ "$confirmOverride" == "s" ]; then
+        # proceed with safe mode
+        sed -i "1s/^/${logScript}\n/"
+        return 0
+    elif [ "$confirmOverride" == "no" ] || [ "$confirmOverride" == "n" ]; then
+        # Cancel process
+        echo "Cancelling"
+        return 1
     else
-        echo "Already some login script found do you want to Override it?(y/n)"
+        echo "Invalid option"
+        overrideConfirmFunc
     fi
+}
+function inject() {
+    # Check previous script
+    if [ -e "$loginFile" ]; then
+        # Check if at least one user is found
+        if [ "$(wc -l <"$loginFile")" -gt 0 ]; then
+            # Detect older/other script
+            local boilerText sysText
+            boilerText='##
+## This script is sourced by /data/data/com.termux/files/usr/bin/login before executing shell.
+##'
+            sysText=$(<"$loginFile")
+            if [ "$sysText" == "$boilerText" ]; then
+                echo "terlog login" >"$loginFile"
+            else
+                echo "Already some login script found do you want to Override it?(y/s/n)"
+                echo 'Type "y/yes" to override'
+                echo 'Type "s/safe" to add safely at the top (recommended)'
+                echo 'Type "n/no" to prevent override and cancel installation'
+                if overrideConfirmFunc; then
+                    echo "Done, give a try by restarting Termux"
+                else
+                    exit
+                fi
+            fi
+        fi
+    else
+        touch "$loginFile"
+    fi
+    # finally inject script
+
 }
 function startSetup() {
     checkExistingCredentialFile
@@ -222,24 +312,23 @@ function loginUser() {
         echo "No user Found"
         loginUser
     fi
-
-    echo "function is under construction"
 }
 function helpUser() {
     local helpText
     helpText="terlog [option]
 possible options are:-
-setup           : setup for first time
-add-user        : add a new user
-login-user      : log a user in
+user-setup      : setup for first time
+user-add        : add a new user
+user-login      : log a user in
+uninstall       : uninstall terlog
 -h              : show help
 --help          : same as -h
 
 Description:-
-'setup' option is for first time setup only. It eventually delete previous login details if exist.
-'add-user' option is to add a new user to the database. It doesn't delete previous login details.
-'login-user' option is to log a user in. This option is used by system at starting.
-
+'user-setup' option is for first time setup only. It eventually delete previous login details if exist.
+'user-add' option is to add a new user to the database. It doesn't delete previous login details.
+'user-login' option is to log a user in. This option is used by system at starting.
+'uninstall' option is to uninstall this(terlog) package.
 More options will be available soon.
 "
     printf "\n"
@@ -247,14 +336,21 @@ More options will be available soon.
     printf "\n\n"
 }
 # Main code starts here
-if [ "$1" == "setup" ]; then
+if [ "$1" == "user-setup" ]; then
     startSetup
-elif [ "$1" == "add-user" ]; then
+elif [ "$1" == "user-add" ]; then
     addUser
-elif [ "$1" == "login-user" ]; then
+elif [ "$1" == "user-login" ]; then
     loginUser
+
+elif [ "$1" == "uninstall" ]; then
+    if [ "$2" == "-y" ]; then
+        promtUninstall "-y"
+    else
+        promtUninstall
+    fi
 elif [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
     helpUser
 else
-    helpUser
+    echo 'Invalid Command. Try "terlog -h" for help.'
 fi

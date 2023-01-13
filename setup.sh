@@ -56,14 +56,14 @@ function manageBinPermission() {
     fi
 }
 function installRequiredPackage() {
-    local packPath
-    packPath=$(which openssl-tool)
-    if [ "$packPath" == "" ]; then
-        # package install
+    # install required pacakges
+    if ! command -v openssl passwd >/dev/null 2>&1; then
         echo "Installing required package.."
-        pkg install -y openssl-tool >/dev/null
-    else
-        echo "Necessary file already installed"
+        if pkg install openssl-tool -y >/dev/null 2>&1; then
+            echo "Successfully installed"
+        else
+            echo "There was an error installing package"
+        fi
     fi
 }
 function setup() {
@@ -73,7 +73,7 @@ function setup() {
     manageBinPermission
     # Install required dependency
     installRequiredPackage
-    echo 'Successfully installed. Use "terlog --help" for details info'
+    echo 'Use "terlog --help" for details info'
     echo 'use "terlog setup" to setup login system'
 }
 setup

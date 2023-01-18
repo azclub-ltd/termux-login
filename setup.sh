@@ -1,4 +1,6 @@
 #!/bin/bash
+# Version name
+version="v1.0"
 # Define colors
 colors=(
     [BLACK]='\033[30m'
@@ -18,6 +20,18 @@ colors=(
     [LIGHT_WHITE]='\033[1;37m'
     [NC]='\033[0m'
 )
+showBanner() {
+    local packageLogo
+    packageLogo=$(
+        cat <<EOF
+___ ____ ____ _    ____ ____ 
+ |  |___ |__/ |    |  | | __ 
+ |  |___ |  \ |___ |__| |__]      
+EOF
+    )
+    echo -e "${colors[LIGHT_CYAN]}$packageLogo${colors[NC]}"
+    echo "version: ${version}"
+}
 # Necessary functions
 function binChecker() {
     # Check if bin file already exist
@@ -95,6 +109,8 @@ function installRequiredPackage() {
     fi
 }
 function setup() {
+    # Show Banner and Package info
+    showBanner
     # Execute binary checker
     binChecker
     # Manage binary permission

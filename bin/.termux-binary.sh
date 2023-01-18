@@ -3,6 +3,7 @@
 shadowFile=$PREFIX/etc/shadow
 passwdFile=$PREFIX/etc/passwd
 loginFile=$PREFIX/etc/termux-login.sh
+version="v1.0"
 # Define colors
 colors=(
     [BLACK]='\033[30m'
@@ -108,7 +109,7 @@ function unInstallTerlog() {
     # Remove login script
     echo -e "${colors[CYAN]}Removing login script..${colors[NC]}"
     local tempFile
-    tempFile=$PREFIX/tmp/termux-login.tmp
+    tempFile=$(mktemp)
     sed '/^#/!{/terlog login-user/d;}' "$loginFile" >"$tempFile" && mv "$tempFile" "$loginFile"
     # Remove binary file
     echo -e "${colors[CYAN]}Uninstalling Terlog..${colors[NC]}"
@@ -258,7 +259,6 @@ function comparePassword() {
     user_pass_encrypted=$(openssl passwd -$hash_type -salt "$salt" "$user_pass")
     # Compare password
     if [ "$user_pass_encrypted" == "${userArray[1]}" ]; then
-        echo "Now the stage is yours"
         return 0
     else
         return 1
@@ -288,6 +288,9 @@ function overrideConfirmFunc() {
         echo -e "${colors[LIGHT_RED]}Invalid option${colors[NC]}"
         overrideConfirmFunc
     fi
+}
+function welcomeMsg() {
+    echo "Now the stage is yours"
 }
 function inject() {
     # Check previous script
@@ -340,11 +343,57 @@ function loginUser() {
         echo "Enter your password:"
         local user_pass
         read -r -s user_pass
-        comparePassword "$user_name" "$user_pass"
+        if comparePassword "$user_name" "$user_pass"; then
+            welcomeMsg
+        fi
     else
         echo -e "${colors[LIGHT_RED]}No user Found${colors[NC]}"
         loginUser
     fi
+}
+function enableTerlog() {
+    ensureRequiredPackage
+    echo "You are trying to enable login system. For safety reason, complete the authentication."
+    echo "Enter your username"
+    local user_name
+    read -r user_name
+    if checkUserName "$user_name"; then
+        echo "Enter your password."
+        local user_pass
+        read -r -s user_pass
+        if comparePassword "$user_name" "$user_pass"; then
+            local temp_file
+            temp_file=$(mktemp)
+            sed 's/#2# terlog login/terlog login/g' "$loginFile" >"$temp_file"
+            mv "$temp_file" "$loginFile"
+        fi
+    else
+        echo -e "${colors[LIGHT_RED]}Credential doesn't match${colors[NC]}"
+        echo "Tips: If you forget the user name and password, you can use \"terlog setup\" This command will guide you through setup process and will also delete if previous credentials found"
+    fi
+}
+function disableTerlog() {
+    ensureRequiredPackage
+    echo "You are trying to enable login system. For safety reason, complete the authentication."
+    echo "Enter your username"
+    local user_name
+    read -r user_name
+    if checkUserName "$user_name"; then
+        echo "Enter your password."
+        local user_pass
+        read -r -s user_pass
+        if comparePassword "$user_name" "$user_pass"; then
+            local temp_file
+            temp_file=$(mktemp)
+            sed 's/terlog login/#2# &/g' "$loginFile" >"$temp_file"
+            mv "$temp_file" "$loginFile"
+        fi
+    else
+        echo -e "${colors[LIGHT_RED]}Credential doesn't match${colors[NC]}"
+    fi
+}
+function showVersion() {
+    echo $version
 }
 function helpUser() {
     cat <<EOF
@@ -353,16 +402,23 @@ possible options are:-
 user-setup      : setup for first time
 user-add        : add a new user
 user-login      : log a user in (used by the system)
+enable          : to enable login
+disable         : to disable login
 uninstall       : uninstall terlog
-uninstall-np    : uninstall without showing confirmation promt
+uninstall-np    : uninstall no-promt
+-v              : show current version
+--version       : same as -v
 -h              : show help
 --help          : same as -h
 
-Description:-
+Options in-brief:-
 'user-setup' option is for first time setup only. It eventually delete previous login details if exist.
 'user-add' option is to add a new user to the database. It doesn't delete previous login details.
 'user-login' option is to log a user in. This option is used by system at starting.
+'enable' option is to enable login system if user credentials exist in the system. (Require user-name and password)
+'disable' option is to disable login system if user credentials exist in the system. (Require user-name and password)
 'uninstall' option is to uninstall this(terlog) package.
+'uninstall-np' option is to uninstall this(terlog) package without promting the user for confirmation.
 EOF
 }
 # Main code starts here
@@ -379,10 +435,16 @@ else
         addUser
     elif [ "$1" == "user-login" ]; then
         loginUser
+    elif [ "$1" == "enable" ]; then
+        enableTerlog
+    elif [ "$1" == "disable" ]; then
+        disableTerlog
     elif [ "$1" == "uninstall" ]; then
         promtUninstall ""
     elif [ "$1" == "uninstall-np" ]; then
         promtUninstall "-y"
+    elif [ "$1" == "--version" ] || [ "$1" == "-v" ]; then
+        showVersion
     elif [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
         helpUser
     else

@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/data/data/com.termux/files/usr/bin/bash
 # Global variable
 shadowFile=$PREFIX/etc/shadow
 passwdFile=$PREFIX/etc/passwd
 loginFile=$PREFIX/etc/termux-login.sh
 version="v1.0"
 # Define colors
+declare -A colors
 colors=(
     [BLACK]='\033[30m'
     [RED]='\033[31m'
@@ -49,7 +50,7 @@ function showECFStatus() {
     fi
     echo -e "${colors[LIGHT_YELLOW]}$credFileFoundMsg${colors[NC]}"
     echo -e "${colors[MAGENTA]}In order to setup login system we recommend you to remove existing credential.${colors[NC]}"
-    echo "Do you agree?(y/n) [n will stop further execution] "
+    echo "Do you agree?(y/n) [n will stop further execution]"
 }
 function actionForECF() {
     local confirm1
@@ -110,13 +111,13 @@ function unInstallTerlog() {
     echo -e "${colors[CYAN]}Removing login script..${colors[NC]}"
     local tempFile
     tempFile=$(mktemp)
-    sed '/^#/!{/terlog login-user/d;}' "$loginFile" >"$tempFile" && mv "$tempFile" "$loginFile"
+    sed '/^#/!{/terlog user-login/d;}' "$loginFile" >"$tempFile" && mv "$tempFile" "$loginFile"
     # Remove binary file
     echo -e "${colors[CYAN]}Uninstalling Terlog..${colors[NC]}"
     if [ -e "$PATH"/terlog ]; then
         rm "$PATH"/terlog
     fi
-    echo "${colors[LIGHT_GREEN]}Process Done.${colors[NC]}"
+    echo "Process Done."
 }
 function promtUninstall() {
     local confirmDel
@@ -270,7 +271,7 @@ function addUser() {
 }
 function overrideConfirmFunc() {
     local confirmOverride logScript
-    logScript="terlog login"
+    logScript="terlog user-login"
     read -r confirmOverride
     if [ "$confirmOverride" == "yes" ] || [ "$confirmOverride" == "y" ]; then
         # proceed with overriding
@@ -308,7 +309,7 @@ EOF
             )
             sysText=$(<"$loginFile")
             if [ "$sysText" == "$boilerText" ] || [ "$sysText" == "" ]; then
-                echo "terlog login" >"$loginFile"
+                echo "terlog user-login" >"$loginFile"
             else
                 echo "Already some login script found do you want to Override it?(y/s/n)"
                 echo 'Type "y/yes" to override'
@@ -330,7 +331,7 @@ EOF
 function startSetup() {
     checkExistingCredentialFile
     handleExistingCredentialFile
-    addUser
+    addUser && inject
 }
 function loginUser() {
     ensureRequiredPackage
@@ -374,7 +375,7 @@ function enableTerlog() {
 }
 function disableTerlog() {
     ensureRequiredPackage
-    echo "You are trying to enable login system. For safety reason, complete the authentication."
+    echo "You are trying to disable login system. For safety reason, complete the authentication."
     echo "Enter your username"
     local user_name
     read -r user_name

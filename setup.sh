@@ -2,6 +2,7 @@
 # Version name
 version="v1.0"
 # Define colors
+declare -A colors
 colors=(
     [BLACK]='\033[30m'
     [RED]='\033[31m'
